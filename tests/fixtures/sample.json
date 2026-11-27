@@ -1,0 +1,25 @@
+{
+  "endpoint": "https://qdrant.internal:6333",
+  "apiKeySecret": "QDRANT_API_KEY",
+  "collections": [
+    {
+      "schema": "main",
+      "table": "contracts",
+      "collection": "contracts_v3",
+      "generation": 1,
+      "schemaVersion": 1,
+      "fields": [
+        { "name": "tenant_id", "path": "tenant_id", "type": "VARCHAR", "required": true },
+        { "name": "document_id", "path": "document_id", "type": "VARCHAR", "required": true },
+        { "name": "title", "path": "title", "type": "VARCHAR", "required": false },
+        { "name": "status", "path": "status", "type": "VARCHAR", "required": true },
+        { "name": "owner_id", "path": "owner_id", "type": "BIGINT", "required": true },
+        { "name": "body", "path": "body", "type": "VARCHAR", "required": false }
+      ],
+      "vectors": [
+        { "name": "text_dense", "dimensions": 768, "datatype": "float32",
+          "dependsOn": ["body", "title"], "modelVersion": "e5-large-v2@1" }
+      ]
+    }
+  ]
+}

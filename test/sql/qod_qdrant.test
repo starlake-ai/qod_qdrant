@@ -1,0 +1,14 @@
+# name: test/sql/qod_qdrant.test
+# description: the standalone extension loads, registers its functions and its secret type
+# group: [qod_qdrant]
+
+require qod_qdrant
+
+query I
+SELECT count(DISTINCT function_name) FROM duckdb_functions()
+WHERE function_name IN ('qod_search', 'qod_dense', 'qod_bm25', 'qod_rrf');
+----
+4
+
+statement ok
+CREATE SECRET q (TYPE qdrant, API_KEY 'k');

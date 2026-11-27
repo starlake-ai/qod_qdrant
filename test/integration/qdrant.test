@@ -1,0 +1,53 @@
+# name: test/integration/qdrant.test
+# description: against a real Qdrant v1.20.2 over verified TLS (scripts/qdrant-it.sh): scans, dense, keyword and
+#              hybrid search, filter_sql, and a wrong key refused without echoing it
+# group: [qod_qdrant]
+
+require qod_qdrant
+
+require-env QOD_QDRANT_IT_ENDPOINT
+
+require-env QOD_QDRANT_IT_KEY
+
+statement ok
+CREATE SECRET q (TYPE qdrant, API_KEY '${QOD_QDRANT_IT_KEY}');
+
+statement ok
+ATTACH 'qdrant:it' AS kb (TYPE qdrant, SECRET q, READ_ONLY, CONFIG '{"endpoint":"${QOD_QDRANT_IT_ENDPOINT}","apiKeySecret":"QDRANT_API_KEY","guarantee":"filtered_retrieval","collections":[{"schema":"main","table":"docs","collection":"it_docs","generation":1,"schemaVersion":1,"fields":[{"name":"title","path":"title","type":"VARCHAR","required":false},{"name":"body","path":"body","type":"VARCHAR","required":false},{"name":"status","path":"status","type":"VARCHAR","required":true}],"vectors":[{"name":"dense","dimensions":2,"datatype":"float32","dependsOn":["title"],"modelVersion":"test@1"}],"sparseVectors":[{"name":"body_bm25","model":"qdrant/bm25","dependsOn":["body"]}]}]}');
+
+query I
+SELECT count(*) FROM kb.main.docs;
+----
+3
+
+query T
+SELECT title FROM qod_search('kb.main.docs', query := qod_dense('dense', [1.0, 0.0]::FLOAT[]), k := 1);
+----
+Merger memo
+
+query T
+SELECT title FROM qod_search('kb.main.docs', query := qod_bm25('body_bm25', 'invoice'), k := 5);
+----
+Invoice
+
+query T
+SELECT title FROM qod_search('kb.main.docs', query := qod_dense('dense', [0.0, 1.0]::FLOAT[]), filter_sql := 'status = ''active''', k := 5) ORDER BY title;
+----
+Invoice
+Merger memo
+
+query I
+SELECT bool_or(title = 'Merger memo') FROM qod_search('kb.main.docs', query := qod_rrf([qod_bm25('body_bm25', 'merger'), qod_dense('dense', [0.0, 1.0]::FLOAT[])]), k := 5);
+----
+true
+
+statement ok
+CREATE SECRET wrong (TYPE qdrant, API_KEY 'not-the-key-0123456789');
+
+statement ok
+ATTACH 'qdrant:it2' AS bad (TYPE qdrant, SECRET wrong, READ_ONLY, CONFIG '{"endpoint":"${QOD_QDRANT_IT_ENDPOINT}","apiKeySecret":"QDRANT_API_KEY","collections":[{"schema":"main","table":"docs","collection":"it_docs","generation":1,"schemaVersion":1,"fields":[{"name":"title","path":"title","type":"VARCHAR","required":false}],"vectors":[]}]}');
+
+statement error
+SELECT title FROM bad.main.docs;
+----
+search_source_unavailable

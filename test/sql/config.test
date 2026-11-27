@@ -1,0 +1,18 @@
+# name: test/sql/config.test
+# description: ATTACH refuses a config with an unknown key and a source that is not READ_ONLY, before any I/O
+# group: [qod_qdrant]
+
+require qod_qdrant
+
+statement ok
+CREATE SECRET q (TYPE qdrant, API_KEY 'k');
+
+statement error
+ATTACH 'qdrant:docs' AS kb (TYPE qdrant, SECRET q, READ_ONLY, CONFIG '{"endpoint":"https://q.example.com:6333","apiKeySecret":"QDRANT_API_KEY","collections":[],"zzz":1}');
+----
+unknown key "zzz"
+
+statement error
+ATTACH 'qdrant:docs' AS kb (TYPE qdrant, SECRET q, CONFIG '{}');
+----
+must be READ_ONLY

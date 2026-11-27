@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>qod_qdrant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a two-column hero (live k-NN plot beside the SQL that names it), then one reading column of sections; code blocks are the main material. */
+:root {
+  --bg: #f6f7fa;
+  --panel: #ffffff;
+  --ink: #151b26;
+  --muted: #5a6577;
+  --rule: #dde2ea;
+  --accent: #23708f;
+  --accent-soft: #e2f0f5;
+  --warm: #d9672a;
+  --code-bg: #10161f;
+  --code-ink: #dbe3ee;
+  --code-key: #7cc3df;
+  --code-str: #f0a56f;
+  --code-com: #7d8a9c;
+  --dot: #b9c3d0;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131a; --panel: #151c26; --ink: #e5eaf1; --muted: #9aa6b6; --rule: #273140;
+    --accent: #6fb6d4; --accent-soft: #17303b; --warm: #f08c4f;
+    --code-bg: #0a0f15; --code-ink: #d8e0eb; --code-key: #84c8e2; --code-str: #f3ae7e; --code-com: #6f7c8d;
+    --dot: #3b4757;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131a; --panel: #151c26; --ink: #e5eaf1; --muted: #9aa6b6; --rule: #273140;
+  --accent: #6fb6d4; --accent-soft: #17303b; --warm: #f08c4f;
+  --code-bg: #0a0f15; --code-ink: #d8e0eb; --code-key: #84c8e2; --code-str: #f3ae7e; --code-com: #6f7c8d;
+  --dot: #3b4757;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 72px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-size: clamp(1.6rem, 3.2vw, 2.1rem); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 700; }
+p { margin: 0; }
+code { font-family: var(--font-mono); font-size: 0.88em; }
+p code, li code, td code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+.status {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+  padding-block: 10px; border-bottom: 1px solid var(--rule); font-size: 0.88rem; color: var(--muted);
+}
+.status b { color: var(--warm); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.76rem; }
+
+header.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 40px; align-items: center; padding-block: 48px 40px; }
+.name { font-family: var(--font-mono); font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 500; letter-spacing: -0.03em; margin: 0; }
+.name span { color: var(--accent); }
+.tagline { font-family: var(--font-display); font-size: clamp(1.25rem, 2.6vw, 1.6rem); font-weight: 500; line-height: 1.25; margin-top: 14px; max-width: 26ch; }
+.lede { color: var(--muted); margin-top: 16px; max-width: 46ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.chip { font-family: var(--font-mono); font-size: 0.78rem; border: 1px solid var(--rule); background: var(--panel); border-radius: 999px; padding: 3px 11px; color: var(--muted); }
+
+.demo { display: grid; gap: 12px; min-width: 0; }
+.plot { position: relative; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; touch-action: none; }
+.plot canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; max-width: 100%; cursor: crosshair; }
+.plot .hint { position: absolute; left: 12px; bottom: 10px; font-size: 0.74rem; color: var(--muted); pointer-events: none; }
+.controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 0.88rem; }
+.controls label { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); }
+.controls input[type="range"] { accent-color: var(--accent); width: 160px; }
+.hits { font-size: 0.85rem; color: var(--muted); min-height: 1.5em; }
+.hits strong { color: var(--ink); font-weight: 600; }
+
+pre {
+  margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 10px;
+  padding: 16px 18px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.86rem; line-height: 1.6;
+}
+pre .k { color: var(--code-key); }
+pre .s { color: var(--code-str); }
+pre .c { color: var(--code-com); }
+pre .n { color: var(--warm); font-weight: 500; }
+
+section { display: grid; gap: 20px; padding-block: 44px; border-top: 1px solid var(--rule); }
+.intro { max-width: 64ch; color: var(--muted); }
+
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 32px; }
+.feature { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.feature p { color: var(--muted); font-size: 0.95rem; }
+.feature .where { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); letter-spacing: 0.02em; }
+
+.steps { display: grid; gap: 22px; counter-reset: step; }
+.step { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: 14px; }
+.step::before {
+  counter-increment: step; content: counter(step);
+  font-family: var(--font-mono); font-weight: 500; color: var(--accent);
+  border: 1px solid var(--rule); border-radius: 50%; width: 2.2rem; height: 2.2rem; display: grid; place-items: center; background: var(--panel);
+}
+.step > div { display: grid; gap: 10px; min-width: 0; }
+.step p { color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.92rem; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th { font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--bg); }
+td:first-child { font-family: var(--font-mono); font-size: 0.85rem; white-space: nowrap; }
+tr.hl td { background: var(--accent-soft); }
+tr.hl td:first-child { color: var(--accent); font-weight: 500; }
+.opts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.opts dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px; font-size: 0.92rem; }
+.opts dt { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
+.opts dd { margin: 0; color: var(--muted); }
+@media (max-width: 860px) { .opts { grid-template-columns: minmax(0, 1fr); } }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+ul.plain { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; color: var(--muted); }
+ul.plain li::marker { color: var(--accent); }
+
+.roadmap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.lane { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
+.lane h3 { font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+.pill { font-family: var(--font-mono); font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.pill.next { background: transparent; border: 1px solid var(--warm); color: var(--warm); }
+.lane ul { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; font-size: 0.92rem; color: var(--muted); }
+
+footer { border-top: 1px solid var(--rule); padding-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--muted); font-size: 0.88rem; }
+
+@media (max-width: 860px) {
+  header.hero, .split { grid-template-columns: minmax(0, 1fr); }
+  .features, .roadmap { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<div class="status" role="note">
+  <b>Preview</b>
+  <span>Not on DuckDB's community extensions yet. It runs inside QoD (Quack on Demand) and builds as a standalone DuckDB extension from source.</span>
+</div>
+
+<header class="hero">
+  <div>
+    <h1 class="name">qod<span>_</span>qdrant</h1>
+    <p class="tagline">Query Qdrant collections from DuckDB, with SQL.</p>
+    <p class="lede">Attach a Qdrant instance, read its collections as tables, and rank them with dense, keyword (BM25) or hybrid search, all in the same SELECT that joins your other data.</p>
+    <div class="chips">
+      <span class="chip">DuckDB 2.0.1</span>
+      <span class="chip">Qdrant 1.20.2</span>
+      <span class="chip">C++ extension</span>
+      <span class="chip">MIT</span>
+    </div>
+  </div>
+
+  <div class="demo" aria-label="Interactive example of a top-k vector search">
+    <div class="plot">
+      <canvas id="plot" width="640" height="480" tabindex="0" aria-label="Example points; the query point moves with the pointer or the arrow keys, and the k nearest points are highlighted"></canvas>
+      <span class="hint">Example points. Drag, or use the arrow keys.</span>
+    </div>
+    <div class="controls">
+      <label for="k">k := <output id="kout">5</output>
+        <input type="range" id="k" min="1" max="10" value="5">
+      </label>
+    </div>
+    <pre id="sql" aria-live="polite"><span class="k">SELECT</span> title, _qod_score
+<span class="k">FROM</span> qod_search(<span class="s">'kb.main.docs'</span>,
+  query := qod_dense(<span class="s">'title_dense'</span>, <span class="n" id="qv">[0.62, 0.41]</span>),
+  k := <span class="n" id="ksql">5</span>);</pre>
+    <p class="hits" id="hits"></p>
+  </div>
+</header>
+
+<section aria-labelledby="what">
+  <h2 id="what">What it does</h2>
+  <p class="intro">Each collection you declare becomes a DuckDB table. A plain scan reads its points; <code>qod_search</code> asks Qdrant for the top k and returns them as rows you can filter, join and aggregate.</p>
+  <div class="features">
+    <div class="feature">
+      <span class="where">SELECT * FROM kb.main.docs</span>
+      <h3>Collections as tables</h3>
+      <p>Declared payload fields are typed columns (VARCHAR, BIGINT, BOOLEAN, DOUBLE). Point ids and scores come back as <code>_qod_id</code> and <code>_qod_score</code>.</p>
+    </div>
+    <div class="feature">
+      <span class="where">qod_dense · qod_bm25 · qod_rrf</span>
+      <h3>Dense, keyword and hybrid</h3>
+      <p>Search by vector, by BM25 keywords computed by Qdrant itself, or fuse several branches with reciprocal rank fusion in one request.</p>
+    </div>
+    <div class="feature">
+      <span class="where">filter_sql := 'status = ''active'''</span>
+      <h3>Filters run in Qdrant</h3>
+      <p>Equality tests, <code>IN</code> lists, <code>AND</code> and <code>OR</code> become a Qdrant filter, so k counts only the rows you asked for. A condition it cannot translate is refused with an error.</p>
+    </div>
+    <div class="feature">
+      <span class="where">"options": {"language": "french"}</span>
+      <h3>BM25 in your language</h3>
+      <p>Each keyword index declares the Qdrant options it was built with. Index the same text twice, French and English, and fuse both in one query.</p>
+    </div>
+    <div class="feature">
+      <span class="where">request := '{"query": ...}'</span>
+      <h3>Raw Qdrant requests</h3>
+      <p>Send a Qdrant query body when SQL helpers are not enough: RRF weights, formulas, MMR. Inside QoD, every request is checked against row and column policies first.</p>
+    </div>
+    <div class="feature">
+      <span class="where">CREATE SECRET (TYPE qdrant, ...)</span>
+      <h3>Strict by default</h3>
+      <p>Unknown config keys are refused, error messages name the path and the rule but never a value, keys live in DuckDB secrets, and TLS is always verified.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="start">
+  <h2 id="start">Quick start</h2>
+  <p class="intro">Until the community listing is live, build it from source: <code>git clone --recurse-submodules https://github.com/starlake-ai/qod_qdrant</code>, then <code>GEN=ninja make release</code>, and load <code>build/release/extension/qod_qdrant/qod_qdrant.duckdb_extension</code> in a DuckDB started with <code>-unsigned</code>.</p>
+  <div class="steps">
+    <div class="step"><div>
+      <h3>Install and load</h3>
+<pre><span class="c">-- once published to DuckDB community extensions</span>
+<span class="k">INSTALL</span> qod_qdrant <span class="k">FROM</span> community;
+<span class="k">LOAD</span> qod_qdrant;</pre>
+    </div></div>
+    <div class="step"><div>
+      <h3>Store the API key as a secret</h3>
+<pre><span class="k">CREATE SECRET</span> q (<span class="k">TYPE</span> qdrant, API_KEY <span class="s">'your-qdrant-key'</span>);</pre>
+      <p>A persistent secret (<code>CREATE PERSISTENT SECRET</code>) is stored unencrypted on disk by DuckDB. Prefer a temporary one, or an environment variable you read yourself.</p>
+    </div></div>
+    <div class="step"><div>
+      <h3>Attach a collection</h3>
+<pre><span class="k">ATTACH</span> <span class="s">'qdrant:docs'</span> <span class="k">AS</span> kb (<span class="k">TYPE</span> qdrant, SECRET q, READ_ONLY, CONFIG <span class="s">'{
+  "endpoint": "https://qdrant.example.com:6333",
+  "apiKeySecret": "QDRANT_API_KEY",
+  "guarantee": "filtered_retrieval",
+  "collections": [{
+    "schema": "main", "table": "docs", "collection": "kb_docs",
+    "generation": 1, "schemaVersion": 1,
+    "fields": [
+      {"name": "title",  "path": "title",  "type": "VARCHAR", "required": false},
+      {"name": "body",   "path": "body",   "type": "VARCHAR", "required": false},
+      {"name": "status", "path": "status", "type": "VARCHAR", "required": true}
+    ],
+    "vectors": [{"name": "title_dense", "dimensions": 768, "datatype": "float32",
+                 "dependsOn": ["title"], "modelVersion": "e5-large-v2@1"}],
+    "sparseVectors": [
+      {"name": "body_fr", "model": "qdrant/bm25", "dependsOn": ["body"],
+       "options": {"language": "french"}},
+      {"name": "body_en", "model": "qdrant/bm25", "dependsOn": ["body"]}
+    ]
+  }]
+}'</span>);</pre>
+    </div></div>
+    <div class="step"><div>
+      <h3>Search</h3>
+<pre><span class="c">-- keyword search in French and English, fused, only active documents</span>
+<span class="k">SELECT</span> title, _qod_score
+<span class="k">FROM</span> qod_search(<span class="s">'kb.main.docs'</span>,
+  query := qod_rrf([
+    qod_bm25(<span class="s">'body_fr'</span>, <span class="s">'résiliation du contrat'</span>),
+    qod_bm25(<span class="s">'body_en'</span>, <span class="s">'résiliation du contrat'</span>)
+  ]),
+  filter_sql := <span class="s">'status = ''active'''</span>,
+  k := <span class="n">10</span>);</pre>
+    </div></div>
+  </div>
+</section>
+
+<section aria-labelledby="config">
+  <h2 id="config">Config reference</h2>
+  <p class="intro">The <code>CONFIG</code> of an <code>ATTACH</code> is one JSON object. Unknown keys are refused, and every error names the JSON path and the rule, never the value.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Key</th><th>What it holds</th></tr></thead>
+      <tbody>
+        <tr><td>endpoint</td><td>The Qdrant origin, <code>https://host[:port]</code>, no path.</td></tr>
+        <tr><td>apiKeySecret</td><td>The name of the secret that holds the API key, <code>[A-Z][A-Z0-9_]{0,63}</code>. A literal key in the config is refused.</td></tr>
+        <tr><td>guarantee</td><td><code>exact_isolated</code> (the default) or <code>filtered_retrieval</code>. Keyword and hybrid searches with a keyword branch run only under <code>filtered_retrieval</code>.</td></tr>
+        <tr><td>collections[]</td><td>1 to 64 entries, each a table: <code>schema</code>, <code>table</code>, the Qdrant <code>collection</code>, <code>generation</code> and <code>schemaVersion</code> (integers, 1 or more).</td></tr>
+        <tr><td>&#8230;fields[]</td><td>The payload fields read as columns: <code>name</code>, <code>path</code> in the payload, <code>type</code> (VARCHAR, BIGINT, BOOLEAN, DOUBLE), <code>required</code>.</td></tr>
+        <tr><td>&#8230;vectors[]</td><td>Dense vectors: <code>name</code>, <code>dimensions</code>, <code>datatype</code> (float32), <code>dependsOn</code> (the fields it was computed from), <code>modelVersion</code>.</td></tr>
+        <tr><td>&#8230;sparseVectors[]</td><td>0 to 8 keyword (BM25) indexes: <code>name</code>, <code>model</code> (<code>qdrant/bm25</code>), <code>dependsOn</code>. The collection declares the vector with <code>modifier: idf</code>.</td></tr>
+        <tr class="hl"><td>&#8230;sparseVectors[].options</td><td>Optional. The Qdrant BM25 options the index was built with, sent with every keyword query on it. Any key is accepted and copied as written; without it, Qdrant's defaults apply (English).</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="opts">
+    <div>
+      <h3>BM25 options</h3>
+      <p class="intro" style="margin-top:8px">What Qdrant's <code>qdrant/bm25</code> model reads from <code>options</code>:</p>
+      <dl style="margin-top:14px">
+        <dt>language</dt><dd>Stemming and stopwords for that language, <code>english</code> by default.</dd>
+        <dt>stemmer</dt><dd>Set apart from the language, or <code>{"type": "none"}</code> to turn it off.</dd>
+        <dt>stopwords</dt><dd>Words to drop, merged with the language's own set.</dd>
+        <dt>tokenizer</dt><dd>How text is split into words.</dd>
+        <dt>ascii_folding</dt><dd><code>true</code> matches words with and without accents.</dd>
+        <dt>k, b, avg_len</dt><dd>BM25's scoring parameters.</dd>
+      </dl>
+    </div>
+    <div>
+      <h3>Match them to the indexing</h3>
+      <p class="intro" style="margin-top:8px">Qdrant applies these options when it builds the index and again when it reads a query. Declare exactly what your loader used: Qdrant checks neither the keys nor the values, and a mismatch only shows as missing results.</p>
+<pre style="margin-top:14px"><span class="c">-- the same text, indexed twice</span>
+{<span class="s">"name"</span>: <span class="s">"body_fr"</span>, <span class="s">"model"</span>: <span class="s">"qdrant/bm25"</span>,
+ <span class="s">"dependsOn"</span>: [<span class="s">"body"</span>],
+ <span class="s">"options"</span>: {<span class="s">"language"</span>: <span class="s">"french"</span>, <span class="s">"ascii_folding"</span>: <span class="n">true</span>}}
+{<span class="s">"name"</span>: <span class="s">"body_en"</span>, <span class="s">"model"</span>: <span class="s">"qdrant/bm25"</span>,
+ <span class="s">"dependsOn"</span>: [<span class="s">"body"</span>]}</pre>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="ref">
+  <h2 id="ref">SQL reference</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td>qod_search(relation, query := ..., filter_sql := ..., k := ...)</td><td>Table function: the top k points of a declared table, best first, with every declared column, <code>_qod_id</code> and <code>_qod_score</code>.</td></tr>
+        <tr><td>qod_search(relation, request := '&lt;json&gt;', k := ...)</td><td>The same with a raw Qdrant <code>points/query</code> body instead of <code>query</code>.</td></tr>
+        <tr><td>qod_dense(vector_name, vector)</td><td>A dense branch: the query vector, checked against the declared dimensions.</td></tr>
+        <tr><td>qod_bm25(vector_name, text)</td><td>A keyword branch: Qdrant tokenizes the text with the index's declared options.</td></tr>
+        <tr><td>qod_rrf([branches], prefetch_k := ...)</td><td>Reciprocal rank fusion of two or more branches, dense or keyword.</td></tr>
+        <tr><td>_qod_id, _qod_score</td><td>The point id (decimal or UUID text) and Qdrant's score. Scores of dense, keyword and hybrid searches are not comparable with each other.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="limits">
+  <h2 id="limits">Good to know</h2>
+  <div class="split">
+    <ul class="plain">
+      <li>BM25 options must match the ones used when the collection was indexed; Qdrant does not check them, and a mismatch silently loses matches.</li>
+      <li>RRF uses Qdrant's default constant unless a raw request sets <code>rrf.k</code> or weights.</li>
+      <li>Keyword statistics are computed per shard, so a document's score depends on its shard.</li>
+    </ul>
+    <ul class="plain">
+      <li>Sources are read-only; the extension never writes to Qdrant.</li>
+      <li>Budgets cap k, request and response size, deadline, concurrency and prefetch depth, each a DuckDB setting.</li>
+      <li>Endpoints must be HTTPS; plain HTTP is planned for loopback hosts only, for local development.</li>
+    </ul>
+  </div>
+</section>
+
+<section aria-labelledby="status">
+  <h2 id="status">Where it stands</h2>
+  <div class="roadmap">
+    <div class="lane">
+      <h3>Inside QoD <span class="pill">working</span></h3>
+      <ul>
+        <li>Scans, dense, keyword and hybrid search</li>
+        <li>Per-index BM25 options</li>
+        <li>Raw requests, checked against row and column policies</li>
+      </ul>
+    </div>
+    <div class="lane">
+      <h3>Standalone DuckDB <span class="pill">building</span></h3>
+      <ul>
+        <li>Loadable build from DuckDB's extension template</li>
+        <li>Integration suite against Qdrant 1.20.2</li>
+        <li>Linux, macOS and Windows, built and tested in CI</li>
+      </ul>
+    </div>
+    <div class="lane">
+      <h3>Release <span class="pill next">planned</span></h3>
+      <ul>
+        <li><code>INSTALL qod_qdrant FROM community</code></li>
+        <li>Plain HTTP on loopback hosts, for local development</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>qod_qdrant · MIT License · © 2026 Starlake AI</span>
+  <span>Repository: <a href="https://github.com/starlake-ai/qod_qdrant">github.com/starlake-ai/qod_qdrant</a></span>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var canvas = document.getElementById('plot');
+  var ctx = canvas.getContext('2d');
+  var kInput = document.getElementById('k');
+  var kOut = document.getElementById('kout');
+  var kSql = document.getElementById('ksql');
+  var qv = document.getElementById('qv');
+  var hits = document.getElementById('hits');
+  var titles = ['Merger agreement draft', 'Lease renewal terms', 'Invoice dispute', 'Supplier onboarding guide',
+    'Quarterly budget notes', 'Data retention policy', 'Contract termination clause', 'Shipping address change',
+    'Refund process', 'Security review checklist', 'Pricing grid 2026', 'Travel expense rules',
+    'Release notes', 'Onboarding checklist'];
+
+  // Deterministic example points (a small LCG), clustered so neighbours read clearly.
+  var seed = 7;
+  function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
+  var centers = [[0.28, 0.32], [0.7, 0.36], [0.5, 0.72], [0.82, 0.78]];
+  var points = [];
+  for (var i = 0; i < 64; i++) {
+    var c = centers[i % centers.length];
+    points.push({ x: c[0] + (rnd() - 0.5) * 0.32, y: c[1] + (rnd() - 0.5) * 0.3, title: titles[i % titles.length] });
+  }
+  var q = { x: 0.62, y: 0.41 };
+  var k = 5;
+
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function nearest() {
+    return points.map(function (p) { return { p: p, d: Math.hypot(p.x - q.x, p.y - q.y) }; })
+      .sort(function (a, b) { return a.d - b.d; }).slice(0, k);
+  }
+
+  function draw() {
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = css('--panel'); ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = css('--rule'); ctx.lineWidth = 1;
+    for (var g = 1; g < 8; g++) {
+      ctx.beginPath(); ctx.moveTo(g * w / 8, 0); ctx.lineTo(g * w / 8, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, g * h / 8); ctx.lineTo(w, g * h / 8); ctx.stroke();
+    }
+    var top = nearest();
+    var chosen = new Set(top.map(function (t) { return t.p; }));
+    var accent = css('--accent'), warm = css('--warm');
+    ctx.strokeStyle = accent; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5;
+    top.forEach(function (t) { ctx.beginPath(); ctx.moveTo(q.x * w, q.y * h); ctx.lineTo(t.p.x * w, t.p.y * h); ctx.stroke(); });
+    ctx.globalAlpha = 1;
+    points.forEach(function (p) {
+      ctx.beginPath(); ctx.arc(p.x * w, p.y * h, chosen.has(p) ? 6 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = chosen.has(p) ? accent : css('--dot'); ctx.fill();
+    });
+    ctx.beginPath(); ctx.arc(q.x * w, q.y * h, 8, 0, Math.PI * 2); ctx.fillStyle = warm; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = css('--panel'); ctx.stroke();
+    kOut.textContent = String(k); kSql.textContent = String(k);
+    qv.textContent = '[' + q.x.toFixed(2) + ', ' + (1 - q.y).toFixed(2) + ']';
+    hits.innerHTML = '';
+    var label = document.createElement('span'); label.textContent = 'Nearest: ';
+    var first = document.createElement('strong'); first.textContent = top[0].p.title;
+    hits.appendChild(label); hits.appendChild(first);
+    if (top.length > 1) {
+      var rest = document.createElement('span');
+      rest.textContent = ', then ' + top.slice(1, 3).map(function (t) { return t.p.title; }).join(', ') + (top.length > 3 ? ' and ' + (top.length - 3) + ' more' : '');
+      hits.appendChild(rest);
+    }
+  }
+
+  function moveTo(ev) {
+    var r = canvas.getBoundingClientRect();
+    q.x = Math.min(0.98, Math.max(0.02, (ev.clientX - r.left) / r.width));
+    q.y = Math.min(0.98, Math.max(0.02, (ev.clientY - r.top) / r.height));
+    draw();
+  }
+  var dragging = false;
+  canvas.addEventListener('pointerdown', function (ev) { dragging = true; try { canvas.setPointerCapture(ev.pointerId); } catch (e) {} moveTo(ev); });
+  canvas.addEventListener('pointermove', function (ev) { if (dragging || ev.pointerType === 'mouse') moveTo(ev); });
+  canvas.addEventListener('pointerup', function () { dragging = false; });
+  canvas.addEventListener('keydown', function (ev) {
+    var step = 0.03, moved = true;
+    if (ev.key === 'ArrowLeft') q.x = Math.max(0.02, q.x - step);
+    else if (ev.key === 'ArrowRight') q.x = Math.min(0.98, q.x + step);
+    else if (ev.key === 'ArrowUp') q.y = Math.max(0.02, q.y - step);
+    else if (ev.key === 'ArrowDown') q.y = Math.min(0.98, q.y + step);
+    else moved = false;
+    if (moved) { ev.preventDefault(); draw(); }
+  });
+  kInput.addEventListener('input', function () { k = Number(kInput.value); draw(); });
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', draw);
+  }
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  draw();
+})();
+</script>
+</body>
+</html>

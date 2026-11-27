@@ -1,0 +1,5 @@
+qod_qdrant
+Copyright (c) 2026 Starlake AI. Licensed under the MIT License (see LICENSE).
+
+This product includes cpp-httplib (third_party/httplib/httplib.h),
+https://github.com/yhirose/cpp-httplib, Copyright (c) 2026 Yuji Hirose, MIT License.

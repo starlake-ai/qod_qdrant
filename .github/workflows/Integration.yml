@@ -1,0 +1,28 @@
+# The integration suite against a real Qdrant v1.20.2 over verified TLS (scripts/qdrant-it.sh), Linux only.
+name: Integration
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  qdrant:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build libssl-dev
+      - name: Build
+        run: GEN=ninja make release
+      - name: Qdrant
+        run: scripts/qdrant-it.sh up
+      - name: Tests
+        run: |
+          set -euo pipefail
+          source .cache/qdrant-it/env
+          GEN=ninja make test_release
+      - name: Stop Qdrant
+        if: always()
+        run: scripts/qdrant-it.sh down

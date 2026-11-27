@@ -1,0 +1,33 @@
+# name: test/sql/endpoint.test
+# description: standalone, with QOD_QDRANT_ALLOWED_ENDPOINTS unset, any https origin attaches; filters that
+#              cannot be lowered are refused at bind; an unreachable endpoint fails at execution
+# group: [qod_qdrant]
+
+require qod_qdrant
+
+statement ok
+CREATE SECRET q (TYPE qdrant, API_KEY 'k');
+
+# keys in any order, with whitespace: not the canonical form
+statement ok
+ATTACH 'qdrant:docs' AS kb (TYPE qdrant, SECRET q, READ_ONLY, CONFIG '{ "collections": [ { "table": "docs", "schema": "main", "collection": "docs", "generation": 1, "schemaVersion": 1, "fields": [ { "name": "title", "path": "title", "type": "VARCHAR", "required": false } ], "vectors": [], "sparseVectors": [ { "name": "title_bm25", "model": "qdrant/bm25", "dependsOn": ["title"] } ] } ], "guarantee": "filtered_retrieval", "apiKeySecret": "QDRANT_API_KEY", "endpoint": "https://127.0.0.1:1" }');
+
+statement error
+ATTACH 'qdrant:plain' AS plain (TYPE qdrant, SECRET q, READ_ONLY, CONFIG '{"endpoint":"http://qdrant.example.com:6333","apiKeySecret":"QDRANT_API_KEY","collections":[]}');
+----
+endpoint must be https://host[:port]
+
+statement error
+SELECT title FROM qod_search('kb.main.docs', query := qod_bm25('title_bm25', 'x'), filter_sql := 'lower(title) = ''x''', k := 5);
+----
+search_query_unsupported
+
+statement error
+SELECT title FROM qod_search('kb.main.docs', query := qod_bm25('title_bm25', 'x'), filter_sql := 'title = ''x''', k := 5);
+----
+search_source_unavailable
+
+statement error
+SELECT title FROM kb.main.docs;
+----
+search_source_unavailable
